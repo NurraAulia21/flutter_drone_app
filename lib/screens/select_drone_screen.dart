@@ -24,7 +24,9 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchDrones();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchDrones();
+    });
   }
 
   @override
@@ -70,7 +72,7 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
   }
 
   void _submitManual() {
-    String input = _manualController.text.trim().toUpperCase();
+    String input = _manualController.text.trim();
     if (input.isEmpty) {
       setState(() => _errorText = 'Masukkan ID drone terlebih dahulu');
       return;
@@ -78,7 +80,9 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
 
     DroneOption? found;
     try {
-      found = _drones.firstWhere((d) => d.id == input);
+      found = _drones.firstWhere(
+        (d) => d.id.toLowerCase() == input.toLowerCase(),
+      );
     } catch (_) {
       found = null;
     }
@@ -227,197 +231,226 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Logo
-              Row(
-                children: [
-                  Icon(Icons.track_changes, color: AppColors.primary, size: 28),
-                  const SizedBox(width: 10),
-                  Text(
-                    'TACTICALOBSERVER',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-
-              const Text(
-                'Mulai Sesi',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const Text(
-                'Masukkan ID drone atau pilih dari daftar',
-                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 32),
-
-              // Card input
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBg,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
+        child: RefreshIndicator(
+          onRefresh: _fetchDrones,
+          color: AppColors.primary,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    MediaQuery.of(context).padding.bottom,
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'ID DRONE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
+                    // Logo + tombol refresh
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _manualController,
-                            textCapitalization: TextCapitalization.characters,
-                            decoration: InputDecoration(
-                              hintText: 'Contoh: DRONE-001',
-                              hintStyle: const TextStyle(
-                                  color: AppColors.textSecondary, fontSize: 13),
-                              errorText: _errorText,
-                              filled: true,
-                              fillColor: AppColors.background,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 14),
-                            ),
-                            onChanged: (_) => setState(() => _errorText = null),
+                        Icon(Icons.track_changes,
+                            color: AppColors.primary, size: 28),
+                        const SizedBox(width: 10),
+                        Text(
+                          'TACTICALOBSERVER',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.2,
                           ),
                         ),
-                        const SizedBox(width: 8),
-
-                        // Tombol Pilih
-                        SizedBox(
-                          height: 48,
-                          child: ElevatedButton(
-                            onPressed: _submitManual,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              elevation: 0,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
-                            ),
-                            child: const Text(
-                              'Pilih',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Tombol dropdown
-                        SizedBox(
-                          height: 48,
-                          width: 48,
-                          child: OutlinedButton(
-                            onPressed: _isLoading
-                                ? null
-                                : () => _showDropdown(context),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: AppColors.primary),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: EdgeInsets.zero,
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColors.primary,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.keyboard_arrow_down,
+                        const Spacer(),
+                        IconButton(
+                          onPressed: _fetchDrones,
+                          icon: _isLoading
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
                                     color: AppColors.primary,
                                   ),
-                          ),
+                                )
+                              : const Icon(Icons.refresh,
+                                  color: AppColors.primary),
+                          tooltip: 'Refresh daftar drone',
                         ),
                       ],
                     ),
+                    const SizedBox(height: 32),
 
-                    // Status loading/error
-                    if (_loadError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.warning_amber_rounded,
-                                color: Colors.orange, size: 16),
-                            const SizedBox(width: 6),
-                            Expanded(
+                    const Text(
+                      'Mulai Sesi',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const Text(
+                      'Masukkan ID drone atau pilih dari daftar',
+                      style: TextStyle(
+                          fontSize: 14, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Card input
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBg,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'ID DRONE',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _manualController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Contoh: DRONE-001',
+                                    hintStyle: const TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 13),
+                                    errorText: _errorText,
+                                    filled: true,
+                                    fillColor: AppColors.background,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 14),
+                                  ),
+                                  onChanged: (_) =>
+                                      setState(() => _errorText = null),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+
+                              // Tombol Pilih
+                              SizedBox(
+                                height: 48,
+                                child: ElevatedButton(
+                                  onPressed: _submitManual,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16),
+                                  ),
+                                  child: const Text(
+                                    'Pilih',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+
+                              // Tombol dropdown
+                              SizedBox(
+                                height: 48,
+                                width: 48,
+                                child: OutlinedButton(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () => _showDropdown(context),
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(
+                                        color: AppColors.primary),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: AppColors.primary,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.keyboard_arrow_down,
+                                          color: AppColors.primary,
+                                        ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_loadError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 10),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.warning_amber_rounded,
+                                      color: Colors.orange, size: 16),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      _loadError!,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _fetchDrones,
+                                    child: const Text('Coba lagi',
+                                        style: TextStyle(fontSize: 12)),
+                                  )
+                                ],
+                              ),
+                            ),
+                          if (!_isLoading && _loadError == null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
                               child: Text(
-                                _loadError!,
+                                '${_drones.length} drone terdaftar',
                                 style: const TextStyle(
                                   fontSize: 12,
-                                  color: Colors.orange,
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
                             ),
-                            TextButton(
-                              onPressed: _fetchDrones,
-                              child: const Text('Coba lagi',
-                                  style: TextStyle(fontSize: 12)),
-                            )
-                          ],
-                        ),
+                        ],
                       ),
-
-                    if (!_isLoading && _loadError == null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          '${_drones.length} drone terdaftar',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
+                    ),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

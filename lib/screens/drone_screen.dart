@@ -329,16 +329,89 @@ class _DroneScreenState extends State<DroneScreen> {
     _postTimer = Timer.periodic(const Duration(seconds: 5), (_) => _postData());
   }
 
-  void _stopDrone() {
-    setState(() {
-      _isActive = false;
-      _status = 'IDLE';
-    });
+  Future<void> _stopDrone() async {
     _positionStream?.cancel();
     _hoverTimer?.cancel();
     _postTimer?.cancel();
     _statusDebounceTimer?.cancel();
     _speedBuffer.clear();
+
+    setState(() {
+      _isActive = false;
+      _status = 'IDLE';
+    });
+
+    // Pastikan server selesai dulu sebelum lanjut
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/stop-drone'),
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: {'drone_id': widget.drone.id},
+      ).timeout(const Duration(seconds: 5));
+      print('Drone stopped: ${response.statusCode} ${response.body}');
+    } catch (e) {
+      print('Stop drone error: $e');
+    }
+  }
+
+  void _confirmBack() {
+    if (!_isActive) {
+      Navigator.pushReplacementNamed(context, '/');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Kembali ke Daftar Drone?',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: const Text(
+          'Drone masih aktif. Apakah kamu ingin menghentikan drone dan kembali ke halaman pilih drone?',
+          style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Batal',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context); // tutup dialog
+              await _stopDrone(); // tunggu server selesai
+
+              // Tunggu sebentar agar server benar-benar selesai update
+              await Future.delayed(const Duration(milliseconds: 500));
+
+              if (mounted) {
+                Navigator.pushReplacementNamed(context, '/');
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFA5858),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              'Hentikan & Kembali',
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ==================== UI ====================
@@ -356,427 +429,439 @@ class _DroneScreenState extends State<DroneScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pushReplacementNamed(context, '/'),
-        ),
-        title: Row(
-          children: [
-            Icon(Icons.track_changes, color: AppColors.primary, size: 22),
-            const SizedBox(width: 8),
-            Text(
-              'TACTICALOBSERVER',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _confirmBack();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+            onPressed: () => _confirmBack(),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.track_changes, color: AppColors.primary, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'TACTICALOBSERVER',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined,
+                  color: AppColors.textPrimary),
+              onPressed: () {},
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.person, color: Colors.white, size: 20),
               ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined,
-                color: AppColors.textPrimary),
-            onPressed: () {},
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(8),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 24),
+              const Text(
+                'Drone Control',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
-              child: const Icon(Icons.person, color: Colors.white, size: 20),
-            ),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 24),
-            const Text(
-              'Drone Control',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+              const Text(
+                'Monitor & kendalikan drone kamu',
+                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
               ),
-            ),
-            const Text(
-              'Monitor & kendalikan drone kamu',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // Card utama
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.cardBg,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Status + LIVE
-                  Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: _statusColor,
-                          shape: BoxShape.circle,
+              // Card utama
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Status + LIVE
+                    Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _statusColor,
+                            shape: BoxShape.circle,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _status,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: _statusColor,
-                          letterSpacing: 1,
+                        const SizedBox(width: 8),
+                        Text(
+                          _status,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _statusColor,
+                            letterSpacing: 1,
+                          ),
                         ),
-                      ),
-                      const Spacer(),
-                      if (_isActive)
+                        const Spacer(),
+                        if (_isActive)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.live.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.live,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'LIVE',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.live,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ID + Nama drone
+                    Row(
+                      children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppColors.live.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
+                            color: AppColors.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.live,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Text(
-                                'LIVE',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.live,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            widget.drone.id,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ID + Nama drone
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          widget.drone.id,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        widget.drone.name,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '(${widget.drone.type})',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Icon drone
-                  Center(
-                    child: Icon(
-                      Icons.router,
-                      size: 80,
-                      color:
-                          _isActive ? AppColors.primary : AppColors.statusOff,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Koordinat
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'KOORDINAT TERKINI',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
+                        const SizedBox(width: 10),
                         Text(
-                          _locationText,
+                          widget.drone.name,
                           style: const TextStyle(
-                            fontSize: 15,
+                            fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textPrimary,
                           ),
                         ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '(${widget.drone.type})',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 20),
 
-                  // Ketinggian banjir
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(10),
+                    // Icon drone
+                    Center(
+                      child: Icon(
+                        Icons.router,
+                        size: 80,
+                        color:
+                            _isActive ? AppColors.primary : AppColors.statusOff,
+                      ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 20),
+
+                    // Koordinat
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'KOORDINAT TERKINI',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _locationText,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Ketinggian banjir
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'KETINGGIAN BANJIR',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _isActive
+                                ? '${_waterLevel.toStringAsFixed(1)} m'
+                                : '-',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: _isActive
+                                  ? AppColors.textPrimary
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Section foto
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'KETINGGIAN BANJIR',
-                          style: TextStyle(
+                        Text(
+                          'FOTO (${_photos.length})',
+                          style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.textSecondary,
                             letterSpacing: 1,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _isActive
-                              ? '${_waterLevel.toStringAsFixed(1)} m'
-                              : '-',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: _isActive
-                                ? AppColors.textPrimary
-                                : AppColors.textSecondary,
+                        // Tombol tambah foto
+                        GestureDetector(
+                          onTap: _takePhoto,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.add_a_photo_outlined,
+                                    color: AppColors.primary, size: 16),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'Tambah Foto',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+                    const SizedBox(height: 12),
 
-            // Section foto
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardBg,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'FOTO (${_photos.length})',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      // Tombol tambah foto
-                      GestureDetector(
-                        onTap: _takePhoto,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.add_a_photo_outlined,
-                                  color: AppColors.primary, size: 16),
-                              const SizedBox(width: 6),
-                              const Text(
-                                'Tambah Foto',
+                    // Grid foto atau placeholder
+                    _photos.isEmpty
+                        ? Container(
+                            width: double.infinity,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: AppColors.background,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'Belum ada foto',
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primary,
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Grid foto atau placeholder
-                  _photos.isEmpty
-                      ? Container(
-                          width: double.infinity,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'Belum ada foto',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
                             ),
-                          ),
-                        )
-                      : SizedBox(
-                          height: 100,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _photos.length,
-                            itemBuilder: (context, index) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: Stack(
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: Image.file(
-                                        _photos[index],
-                                        width: 100,
-                                        height: 100,
-                                        fit: BoxFit.cover,
+                          )
+                        : SizedBox(
+                            height: 100,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _photos.length,
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Image.file(
+                                          _photos[index],
+                                          width: 100,
+                                          height: 100,
+                                          fit: BoxFit.cover,
+                                        ),
                                       ),
-                                    ),
-                                    // Tombol hapus
-                                    Positioned(
-                                      top: 4,
-                                      right: 4,
-                                      child: GestureDetector(
-                                        onTap: () => _deletePhoto(index),
-                                        child: Container(
-                                          width: 22,
-                                          height: 22,
-                                          decoration: BoxDecoration(
-                                            color: Colors.black
-                                                .withValues(alpha: 0.6),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.close,
-                                            color: Colors.white,
-                                            size: 14,
+                                      // Tombol hapus
+                                      Positioned(
+                                        top: 4,
+                                        right: 4,
+                                        child: GestureDetector(
+                                          onTap: () => _deletePhoto(index),
+                                          child: Container(
+                                            width: 22,
+                                            height: 22,
+                                            decoration: BoxDecoration(
+                                              color: Colors.black
+                                                  .withValues(alpha: 0.6),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.close,
+                                              color: Colors.white,
+                                              size: 14,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            // Tombol START / STOP
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: _isActive ? _stopDrone : _startDrone,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      _isActive ? const Color(0xFFFA5858) : AppColors.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+              // Tombol START / STOP
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: _isActive
+                      ? () async {
+                          await _stopDrone();
+                          await Future.delayed(
+                              const Duration(milliseconds: 500));
+                        }
+                      : _startDrone,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        _isActive ? const Color(0xFFFA5858) : AppColors.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
                   ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  _isActive ? 'STOP DRONE' : 'START DRONE',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: 1.2,
+                  child: Text(
+                    _isActive ? 'STOP DRONE' : 'START DRONE',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-          ],
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );
