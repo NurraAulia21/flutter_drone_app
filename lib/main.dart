@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'constants/app_colors.dart';
+import 'screens/select_drone_screen.dart';
 import 'screens/drone_screen.dart';
+import 'models/drone.dart';
 
 void main() {
   runApp(const MyApp());
@@ -19,7 +21,19 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         useMaterial3: true,
       ),
-      home: const DroneScreen(),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const SelectDroneScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/drone') {
+          final drone = settings.arguments as DroneOption;
+          return MaterialPageRoute(
+            builder: (context) => DroneScreen(drone: drone),
+          );
+        }
+        return null;
+      },
     );
   }
 }
