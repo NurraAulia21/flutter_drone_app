@@ -3,8 +3,11 @@ import 'constants/app_colors.dart';
 import 'screens/select_drone_screen.dart';
 import 'screens/drone_screen.dart';
 import 'models/drone.dart';
+// import 'dart:io';
+// import 'services/http_override.dart';
 
 void main() {
+  // HttpOverrides.global = MyHttpOverrides();
   runApp(const MyApp());
 }
 

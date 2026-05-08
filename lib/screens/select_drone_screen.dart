@@ -19,14 +19,12 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
   bool _isLoading = true;
   String? _loadError;
 
-  static const String _baseUrl = 'http://192.168.10.50:8000/api';
+  static const String _baseUrl = 'https://api-drone.heivet.com/api';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _fetchDrones();
-    });
+    _loadDrones();
   }
 
   @override
@@ -35,17 +33,16 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchDrones() async {
+  // KONDISI 2: fetch dari server
+  Future<void> _loadDrones() async {
     setState(() {
       _isLoading = true;
       _loadError = null;
     });
-
     try {
       final response = await http
           .get(Uri.parse('$_baseUrl/drones'))
           .timeout(const Duration(seconds: 10));
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List list = data['data'];
@@ -60,6 +57,8 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
         });
       }
     } catch (e) {
+      print('LOAD DRONE ERROR: $e');
+
       setState(() {
         _loadError = 'Tidak bisa terhubung ke server';
         _isLoading = false;
@@ -68,7 +67,20 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
   }
 
   void _selectDrone(DroneOption drone) {
-    Navigator.pushReplacementNamed(context, '/drone', arguments: drone);
+    if (drone.isActive) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Drone sedang digunakan'),
+        ),
+      );
+      return;
+    }
+
+    Navigator.pushReplacementNamed(
+      context,
+      '/drone',
+      arguments: drone,
+    );
   }
 
   void _submitManual() {
@@ -77,7 +89,6 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
       setState(() => _errorText = 'Masukkan ID drone terlebih dahulu');
       return;
     }
-
     DroneOption? found;
     try {
       found = _drones.firstWhere(
@@ -86,7 +97,6 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
     } catch (_) {
       found = null;
     }
-
     if (found != null) {
       _selectDrone(found);
     } else {
@@ -96,7 +106,6 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
 
   void _showDropdown(BuildContext context) {
     if (_isLoading) return;
-
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -125,18 +134,14 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
               ),
             ),
             const SizedBox(height: 12),
-
-            // Kondisi list kosong
             if (_drones.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
                   'Belum ada drone terdaftar.\nTambahkan drone di aplikasi Monitor.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                  ),
+                  style:
+                      TextStyle(color: AppColors.textSecondary, fontSize: 13),
                 ),
               )
             else
@@ -148,6 +153,15 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                     final drone = _drones[index];
                     return ListTile(
                       onTap: () {
+                        if (drone.isActive) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${drone.id} sedang dipakai'),
+                            ),
+                          );
+                          return;
+                        }
+
                         Navigator.pop(context);
                         _selectDrone(drone);
                       },
@@ -160,29 +174,20 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                               : AppColors.primary.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Icon(
-                          Icons.router,
-                          color: drone.isActive
-                              ? AppColors.statusOn
-                              : AppColors.primary,
-                          size: 22,
-                        ),
+                        child: Icon(Icons.router,
+                            color: drone.isActive
+                                ? AppColors.statusOn
+                                : AppColors.primary,
+                            size: 22),
                       ),
-                      title: Text(
-                        drone.name,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      subtitle: Text(
-                        drone.type,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+                      title: Text(drone.name,
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary)),
+                      subtitle: Text(drone.type,
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary)),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -193,14 +198,11 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                               color: AppColors.primary.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Text(
-                              drone.id,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.primary,
-                              ),
-                            ),
+                            child: Text(drone.id,
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary)),
                           ),
                           const SizedBox(width: 6),
                           Container(
@@ -232,7 +234,7 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _fetchDrones,
+          onRefresh: _loadDrones,
           color: AppColors.primary,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -246,7 +248,6 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Logo + tombol refresh
                     Row(
                       children: [
                         Icon(Icons.track_changes,
@@ -263,16 +264,13 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                         ),
                         const Spacer(),
                         IconButton(
-                          onPressed: _fetchDrones,
+                          onPressed: _loadDrones,
                           icon: _isLoading
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
                                   child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.primary,
-                                  ),
-                                )
+                                      strokeWidth: 2, color: AppColors.primary))
                               : const Icon(Icons.refresh,
                                   color: AppColors.primary),
                           tooltip: 'Refresh daftar drone',
@@ -280,23 +278,15 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                       ],
                     ),
                     const SizedBox(height: 32),
-
-                    const Text(
-                      'Mulai Sesi',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const Text(
-                      'Masukkan ID drone atau pilih dari daftar',
-                      style: TextStyle(
-                          fontSize: 14, color: AppColors.textSecondary),
-                    ),
+                    const Text('Mulai Sesi',
+                        style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary)),
+                    const Text('Masukkan ID drone atau pilih dari daftar',
+                        style: TextStyle(
+                            fontSize: 14, color: AppColors.textSecondary)),
                     const SizedBox(height: 32),
-
-                    // Card input
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
@@ -314,14 +304,11 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'ID DRONE',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary,
-                              letterSpacing: 1,
-                            ),
-                          ),
+                          const Text('ID DRONE',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                  letterSpacing: 1)),
                           const SizedBox(height: 10),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,8 +336,6 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-
-                              // Tombol Pilih
                               SizedBox(
                                 height: 48,
                                 child: ElevatedButton(
@@ -358,37 +343,35 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.primary,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
                                     elevation: 0,
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 16),
                                   ),
-                                  child: const Text(
-                                    'Pilih',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
+                                  child: const Text('Pilih',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700)),
                                 ),
                               ),
                               const SizedBox(width: 8),
-
-                              // Tombol dropdown
                               SizedBox(
                                 height: 48,
                                 width: 48,
                                 child: OutlinedButton(
                                   onPressed: _isLoading
                                       ? null
-                                      : () => _showDropdown(context),
+                                      : () async {
+                                          await _loadDrones();
+                                          _showDropdown(context);
+                                        },
                                   style: OutlinedButton.styleFrom(
                                     side: const BorderSide(
                                         color: AppColors.primary),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
                                     padding: EdgeInsets.zero,
                                   ),
                                   child: _isLoading
@@ -396,14 +379,10 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                                           width: 18,
                                           height: 18,
                                           child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: AppColors.primary,
-                                          ),
-                                        )
-                                      : const Icon(
-                                          Icons.keyboard_arrow_down,
-                                          color: AppColors.primary,
-                                        ),
+                                              strokeWidth: 2,
+                                              color: AppColors.primary))
+                                      : const Icon(Icons.keyboard_arrow_down,
+                                          color: AppColors.primary),
                                 ),
                               ),
                             ],
@@ -417,19 +396,14 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                                       color: Colors.orange, size: 16),
                                   const SizedBox(width: 6),
                                   Expanded(
-                                    child: Text(
-                                      _loadError!,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.orange,
-                                      ),
-                                    ),
-                                  ),
+                                      child: Text(_loadError!,
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.orange))),
                                   TextButton(
-                                    onPressed: _fetchDrones,
-                                    child: const Text('Coba lagi',
-                                        style: TextStyle(fontSize: 12)),
-                                  )
+                                      onPressed: _loadDrones,
+                                      child: const Text('Coba lagi',
+                                          style: TextStyle(fontSize: 12))),
                                 ],
                               ),
                             ),
@@ -439,9 +413,8 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                               child: Text(
                                 '${_drones.length} drone terdaftar',
                                 style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary),
                               ),
                             ),
                         ],
