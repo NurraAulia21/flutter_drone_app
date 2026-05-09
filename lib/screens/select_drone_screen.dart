@@ -364,6 +364,7 @@ class _SelectDroneScreenState extends State<SelectDroneScreen> {
                                       ? null
                                       : () async {
                                           await _loadDrones();
+                                          if (!mounted) return;
                                           _showDropdown(context);
                                         },
                                   style: OutlinedButton.styleFrom(

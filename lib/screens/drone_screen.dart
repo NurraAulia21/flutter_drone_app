@@ -46,6 +46,8 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
   static const double _accuracyThreshold = 50.0;
   static const double _speedFlyingThreshold = isTesting ? 0.4 : 2.0;
   static const double _speedHoverThreshold = 0.15;
+  double _currentSpeed = 0.0;
+  double _averageSpeed = 0.0;
 
   final List<double> _speedBuffer = [];
   static const int _bufferSize = 4;
@@ -56,17 +58,23 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    _checkLocationPermission();
     WidgetsBinding.instance.addObserver(this);
+    _checkLocationPermission();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _positionStream?.cancel();
     _hoverTimer?.cancel();
     _postTimer?.cancel();
     _statusDebounceTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+
+    // FORCE STOP saat screen ditutup
+    if (_isActive) {
+      _forceStopDrone();
+    }
+
     _httpClient.close();
     super.dispose();
   }
@@ -87,6 +95,11 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
         _hoverTimer?.cancel();
         _postTimer?.cancel();
         _statusDebounceTimer?.cancel();
+        _forceStopDrone();
+      } else if (state == AppLifecycleState.resumed) {
+        if (_isActive && _positionStream == null) {
+          _startLocationStream();
+        }
       }
     }
   }
@@ -160,6 +173,10 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
       double accuracy = position.accuracy;
       if (accuracy > _accuracyThreshold) return;
       double avgSpeed = _getAverageSpeed(speed);
+      setState(() {
+        _currentSpeed = speed;
+        _averageSpeed = avgSpeed;
+      });
       print(
           'Speed: ${speed.toStringAsFixed(2)} | Avg Speed: ${avgSpeed.toStringAsFixed(2)} | Accuracy: ${accuracy.toStringAsFixed(1)}');
       if (avgSpeed > _speedFlyingThreshold) {
@@ -187,9 +204,20 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
 
   Future<void> _openReport() async {
     _postTimer?.cancel();
+
     final XFile? photo =
         await _picker.pickImage(source: ImageSource.camera, imageQuality: 85);
-    if (photo == null) return;
+
+    // Jika cancel kamera tanpa ambil foto
+    if (photo == null) {
+      if (_isActive) {
+        _postTimer = Timer.periodic(
+          const Duration(seconds: 5),
+          (_) => _postData(),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _capturedPhoto = File(photo.path);
@@ -198,7 +226,6 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
       _taggedPhoto = null;
     });
 
-    // Tunggu widget tag render dulu baru capture
     await Future.delayed(const Duration(milliseconds: 300));
     await _captureTaggedPhoto();
   }
@@ -542,6 +569,21 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _forceStopDrone() async {
+    try {
+      await _httpClient.post(
+        Uri.parse('$_baseUrl/stop-drone'),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+        },
+        body: {
+          'drone_id': widget.drone.id,
+        },
+      );
+    } catch (_) {}
+  }
+
   void _confirmBack() {
     if (_showReportPreview) {
       showDialog(
@@ -837,29 +879,63 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Status + LIVE
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: _statusColor,
-                        shape: BoxShape.circle,
-                      ),
+                    // STATUS
+                    Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: _statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _status,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _statusColor,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _status,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: _statusColor,
-                        letterSpacing: 1,
-                      ),
-                    ),
+
                     const Spacer(),
+
+                    // SPEED
                     if (_isActive)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'SPD ${_currentSpeed.toStringAsFixed(2)} m/s',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textSecondary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          Text(
+                            'AVG ${_averageSpeed.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                    if (_isActive) ...[
+                      const SizedBox(width: 12),
+
+                      // LIVE
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 4),
@@ -889,6 +965,7 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
                           ],
                         ),
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 16),
