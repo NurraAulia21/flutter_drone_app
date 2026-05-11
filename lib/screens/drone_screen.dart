@@ -40,6 +40,7 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
   Timer? _hoverTimer;
   Timer? _postTimer;
   Timer? _statusDebounceTimer;
+  Timer? _droneCheckTimer;
 
   static const String _baseUrl = 'https://api-drone.heivet.com/api';
   static const bool isTesting = true;
@@ -68,6 +69,7 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
     _hoverTimer?.cancel();
     _postTimer?.cancel();
     _statusDebounceTimer?.cancel();
+    _droneCheckTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
 
     // FORCE STOP saat screen ditutup
@@ -95,11 +97,11 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
         _hoverTimer?.cancel();
         _postTimer?.cancel();
         _statusDebounceTimer?.cancel();
-        _forceStopDrone();
-      } else if (state == AppLifecycleState.resumed) {
-        if (_isActive && _positionStream == null) {
-          _startLocationStream();
-        }
+        _droneCheckTimer?.cancel();
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (_isActive && _positionStream == null) {
+        _startLocationStream();
       }
     }
   }
@@ -221,7 +223,6 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
 
     setState(() {
       _capturedPhoto = File(photo.path);
-      _waterLevel = _randomWaterLevel();
       _showReportPreview = true;
       _taggedPhoto = null;
     });
@@ -533,6 +534,12 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
     _startLocationStream();
     _resetHoverTimer();
     _postTimer = Timer.periodic(const Duration(seconds: 5), (_) => _postData());
+
+    // Cek apakah drone masih ada di server setiap 30 detik
+    _droneCheckTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _checkDroneStillExists(),
+    );
   }
 
   Future<void> _stopDrone() async {
@@ -541,6 +548,7 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
     _postTimer?.cancel();
     _statusDebounceTimer?.cancel();
     _speedBuffer.clear();
+    _droneCheckTimer?.cancel();
 
     setState(() {
       _isActive = false;
@@ -566,6 +574,41 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
       print('Drone stopped: ${response.statusCode} ${response.body}');
     } catch (e) {
       print('Stop drone error: $e');
+    }
+  }
+
+  Future<void> _checkDroneStillExists() async {
+    try {
+      final response = await _httpClient.get(
+        Uri.parse('$_baseUrl/drones'),
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List list = data['data'];
+        final exists = list.any(
+          (d) => d['drone_id'].toString() == widget.drone.id,
+        );
+
+        if (!exists && mounted) {
+          await _stopDrone();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    'Drone ini telah dihapus dari sistem. Kembali ke daftar drone.'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+            await Future.delayed(const Duration(seconds: 3));
+            if (mounted) Navigator.pushReplacementNamed(context, '/');
+          }
+        }
+      }
+    } catch (e) {
+      print('Check drone error: $e');
     }
   }
 
