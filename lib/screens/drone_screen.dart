@@ -85,14 +85,25 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached) {
       if (_isActive) {
-        _httpClient.post(
-          Uri.parse('$_baseUrl/stop-drone'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: jsonEncode({'drone_id': widget.drone.id}),
-        );
+        if (widget.drone.dbId != null) {
+          _httpClient.patch(
+            Uri.parse('$_baseUrl/drones/${widget.drone.dbId}/status'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({'status': 0}),
+          );
+        } else {
+          _httpClient.post(
+            Uri.parse('$_baseUrl/stop-drone'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({'drone_id': widget.drone.id}),
+          );
+        }
         _positionStream?.cancel();
         _hoverTimer?.cancel();
         _postTimer?.cancel();
@@ -547,8 +558,8 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
     _hoverTimer?.cancel();
     _postTimer?.cancel();
     _statusDebounceTimer?.cancel();
-    _speedBuffer.clear();
     _droneCheckTimer?.cancel();
+    _speedBuffer.clear();
 
     setState(() {
       _isActive = false;
@@ -558,22 +569,41 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
       _showReportPreview = false;
     });
 
-    try {
-      final response = await _httpClient
-          .post(
-            Uri.parse('$_baseUrl/stop-drone'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: jsonEncode({
-              'drone_id': widget.drone.id,
-            }),
-          )
-          .timeout(const Duration(seconds: 5));
-      print('Drone stopped: ${response.statusCode} ${response.body}');
-    } catch (e) {
-      print('Stop drone error: $e');
+    // PATCH /api/drones/{id}/status
+    if (widget.drone.dbId != null) {
+      try {
+        final response = await _httpClient
+            .patch(
+              Uri.parse('$_baseUrl/drones/${widget.drone.dbId}/status'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: jsonEncode({'status': 0}),
+            )
+            .timeout(const Duration(seconds: 5));
+        print('Drone stopped: ${response.statusCode} ${response.body}');
+      } catch (e) {
+        print('Stop drone error: $e');
+      }
+    } else {
+      // Fallback pakai stop-drone lama kalau dbId tidak ada
+      try {
+        final response = await _httpClient
+            .post(
+              Uri.parse('$_baseUrl/stop-drone'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: jsonEncode({'drone_id': widget.drone.id}),
+            )
+            .timeout(const Duration(seconds: 5));
+        print(
+            'Drone stopped fallback: ${response.statusCode} ${response.body}');
+      } catch (e) {
+        print('Stop drone fallback error: $e');
+      }
     }
   }
 
@@ -614,16 +644,25 @@ class _DroneScreenState extends State<DroneScreen> with WidgetsBindingObserver {
 
   Future<void> _forceStopDrone() async {
     try {
-      await _httpClient.post(
-        Uri.parse('$_baseUrl/stop-drone'),
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json',
-        },
-        body: {
-          'drone_id': widget.drone.id,
-        },
-      );
+      if (widget.drone.dbId != null) {
+        await _httpClient.patch(
+          Uri.parse('$_baseUrl/drones/${widget.drone.dbId}/status'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({'status': 0}),
+        );
+      } else {
+        await _httpClient.post(
+          Uri.parse('$_baseUrl/stop-drone'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({'drone_id': widget.drone.id}),
+        );
+      }
     } catch (_) {}
   }
 

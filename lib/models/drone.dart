@@ -1,4 +1,5 @@
 class DroneOption {
+  final int? dbId;
   final String id;
   final String name;
   final String type;
@@ -8,6 +9,7 @@ class DroneOption {
   final double longitude;
 
   DroneOption({
+    this.dbId,
     required this.id,
     required this.name,
     required this.type,
@@ -19,19 +21,22 @@ class DroneOption {
 
   factory DroneOption.fromJson(Map<String, dynamic> json) {
     return DroneOption(
-      id: json['drone_id'].toString(),
-      name: json['name']?.toString() ?? '-',
-      type: json['type']?.toString() ?? '-',
-      location: json['location']?.toString() ?? '-',
-      isActive: json['is_active'] ?? false,
-      latitude: double.tryParse(json['latitude'].toString()) ?? 0,
-      longitude: double.tryParse(json['longitude'].toString()) ?? 0,
+      dbId: json['id'],
+      id: json['drone_id'] ?? '',
+      name: json['name'] ?? '-',
+      type: json['type'] ?? '-',
+      location: json['location'] ?? '-',
+      // Handle both is_active dan status
+      isActive:
+          json['is_active'] ?? (json['status'] == 1 || json['status'] == true),
+      latitude: double.tryParse(json['latitude']?.toString() ?? '0') ?? 0.0,
+      longitude: double.tryParse(json['longitude']?.toString() ?? '0') ?? 0.0,
     );
   }
 }
 
 // ============================================================
-// KONDISI 1: DATA DUMMY (comment saat kondisi 2)
+// Data Dummy
 // ============================================================
 // final List<DroneOption> dummyDrones = [
 //   DroneOption(id: 'DRONE-001', name: 'Syma W2', type: 'Quadcopter'),
